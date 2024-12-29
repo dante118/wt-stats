@@ -2,11 +2,14 @@
 from WTwebdev.mapinfo import MapInfo
 from WTwebdev.telemetry import TelemInterface
 from WTwebdev.telemetry import Status
+
 import re
 from time import sleep
+from sys import exit
 
 from enum import StrEnum
 
+import ctypes
 
 
 
@@ -29,6 +32,7 @@ class WTstats():
         critical = 'нанёс критическое повреждение'
         crash = 'разбился'
         fatal = 'нанёс фатальное повреждение'
+        ai_kill = 'уничтожил [ии]'
     
     def update_stat(self, plane: str, type: str, value: int = 1) -> None:
         if plane not in self.stats:      
@@ -37,8 +41,8 @@ class WTstats():
                     'kills' : 0,
                     'deaths': 0,
                     'battles': 0,
-                    'AIs': 0,
-                    'assists':0
+                    'assists':0,
+                    'AIs': 0
                 }})
         try:
             self.stats[plane][type] += value
@@ -63,12 +67,19 @@ class WTstats():
 
                     elif self.Events.crash in event[2]:
                         self.update_stat(self.plane, 'deaths')
+                    
+                    elif self.Events.ai_kill in event[2]:                        
+                        self.update_stat(self.plane, 'AIs')
 
                 elif self.player in event[2] and self.Events.kill in event[2]:
                     self.update_stat(self.plane, 'deaths')
                     
                 elif any(trg in event[2] for trg in self.fatal) and self.Events.kill in event[2]:
                     self.update_stat(self.plane, 'kills')
+                
+                elif any(trg in event[2] for trg in self.critical) and self.Events.kill in event[2]:
+                    self.update_stat(self.plane, 'assists')
+
                         
 
 
@@ -105,6 +116,8 @@ class WTstats():
 
                     if new_status == Status.IN_FLIGHT:
                         self.plane = self.tm.basic_telemetry['airframe']
+                        if self.plane == 'dummy_plane':
+                            continue
                         self.update_stat(self.plane, 'battles')
 
 
@@ -113,15 +126,24 @@ class WTstats():
                         self.critical.clear()
                         self.fatal.clear()
                         if self.stats:
-                            print('Вывести статистику')
-                            print(self.stats)
+                            # print('Статистика:')
+                            for plane in self.stats:
+                                print("{}: {} kills, {} battles, {} deaths. {:.2f} k/b\n".format(plane, self.stats[plane]['kills'], self.stats[plane]['battles'], self.stats[plane]['deaths'],
+                                float(int(self.stats[plane]['kills'])/int(self.stats[plane]['battles']))))
 
                     
                     self.status = new_status
-                    print('Changed to {}'.format(self.status))
+                    # print('Changed to {}'.format(self.status))
+                    if self.status == Status.IN_FLIGHT:
+                        ctypes.windll.kernel32.SetConsoleTitleA("Status: In Flight")
+                    elif self.status  == Status.IN_MENU:
+                        ctypes.windll.kernel32.SetConsoleTitleA("Status: Main Menu")
 
                 if self.status == Status.IN_FLIGHT:
+
                     self.plane = self.tm.basic_telemetry['airframe']
+                    if self.plane == 'dummy_plane':
+                        continue
                     if self.tm.events:
                         for msg in self.tm.events:
                             event = re.findall(r"[^()]+", msg['msg']) # [src, src_veh, act+trg, trg_veh]
@@ -133,7 +155,7 @@ class WTstats():
                 sleep(self.UPTIME)
         
         except KeyboardInterrupt:
-            exit()
+            exit(0)
         
 
 

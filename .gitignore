@@ -1,0 +1,6 @@
+test.py
+
+#pyinstaller build data
+build/
+dist/
+*.spec
